@@ -3,6 +3,7 @@ package handler
 import (
 	"diksia/helper"
 	"diksia/user"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,25 @@ func (h *userHandler) RegisterUser(c *gin.Context) {
 		errors := helper.FormatValidationError(err)
 		errorMessage := gin.H{"errors": errors}
 
-		response := helper.APIResponse("Register account failed", http.StatusUnprocessableEntity, "error", errorMessage)
+		response := helper.APIResponse("Register account failed", http.StatusBadRequest, "error", errorMessage)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	isEmailAvailable, err := h.userService.IsEmailAvailable(input)
+
+	if err != nil {
+		errorMessage := gin.H{"errors": "Error occured during email checking"}
+		response := helper.APIResponse("Email checking failed", http.StatusBadRequest, "error", errorMessage)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	if !isEmailAvailable {
+		data := gin.H{"is_available": isEmailAvailable}
+		metaMessage := "Email has been registered"
+
+		response := helper.APIResponse(metaMessage, http.StatusOK, "success", data)
 		c.JSON(http.StatusBadRequest, response)
 		return
 	}
@@ -51,7 +70,7 @@ func (h *userHandler) Login(c *gin.Context) {
 		errors := helper.FormatValidationError(err)
 		errorMessage := gin.H{"errors": errors}
 
-		response := helper.APIResponse("Login failed", http.StatusUnprocessableEntity, "error", errorMessage)
+		response := helper.APIResponse("Login failed", http.StatusBadRequest, "error", errorMessage)
 		c.JSON(http.StatusBadRequest, response)
 		return
 	}
@@ -59,7 +78,7 @@ func (h *userHandler) Login(c *gin.Context) {
 	loggedInUser, err := h.userService.Login(input)
 	if err != nil {
 		errorMessage := gin.H{"errors": err.Error()}
-		response := helper.APIResponse("Login failed", http.StatusUnprocessableEntity, "error", errorMessage)
+		response := helper.APIResponse("Login failed", http.StatusBadRequest, "error", errorMessage)
 		c.JSON(http.StatusBadRequest, response)
 		return
 	}
@@ -67,5 +86,41 @@ func (h *userHandler) Login(c *gin.Context) {
 	formatter := user.FormatUser(loggedInUser, "token")
 	response := helper.APIResponse("Successfully logged in", http.StatusOK, "success", formatter)
 
+	c.JSON(http.StatusOK, response)
+}
+
+func (h *userHandler) UploadAvatar(c *gin.Context) {
+	file, err := c.FormFile("avatar")
+
+	if err != nil {
+		data := gin.H{"is_uploaded": false}
+		response := helper.APIResponse("Failed to upload avatar image", http.StatusBadRequest, "error", data)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	userID := 1
+
+	path := fmt.Sprintf("images/%d-%s", userID, file.Filename)
+	err = c.SaveUploadedFile(file, path)
+
+	if err != nil {
+		data := gin.H{"is_uploaded": false}
+		response := helper.APIResponse("Failed to upload avatar image", http.StatusBadRequest, "error", data)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	_, err = h.userService.SaveAvatar(userID, path)
+
+	if err != nil {
+		data := gin.H{"is_uploaded": false}
+		response := helper.APIResponse("Failed to upload avatar image", http.StatusBadRequest, "error", data)
+		c.JSON(http.StatusBadRequest, response)
+		return
+	}
+
+	data := gin.H{"is_uploaded": true}
+	response := helper.APIResponse("Avatar successfully uploaded", http.StatusOK, "success", data)
 	c.JSON(http.StatusOK, response)
 }
